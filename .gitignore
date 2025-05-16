@@ -1,0 +1,9 @@
+.env
+laravel/.env.testing
+laravel/.env.dev
+!.gitkeep
+.docker/db/data/*
+laravel/public/auto-deploy/*
+
+# phpstorm で生成されるもの
+.idea/

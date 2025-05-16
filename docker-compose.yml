@@ -1,0 +1,77 @@
+version: "3.9"
+volumes:
+  php-fpm-socket:
+  psysh-store:
+
+services:
+
+  # MySQL
+  db:
+    image: 3shin/mysql5.7:latest
+    #    build:
+    #      context: .
+    #      dockerfile: ./.docker/db/Dockerfile
+    container_name: mysql_laravel
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=hrm
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=root
+      - TZ=Asia/Tokyo
+    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./.docker/db/data:/var/lib/mysql
+      - ./.docker/db/sql:/docker-entrypoint-initdb.d
+    ports:
+      - 3306:3306
+
+  # PHP & php-fpm
+  app:
+    #image: 3shin/php8_with_php-fpm_for_laravel:8.2
+    build:
+      context: .
+      dockerfile: ./.docker/app/Dockerfile
+    volumes:
+      - type: volume
+        source: php-fpm-socket
+        target: /var/run/php-fpm
+        volume:
+          nocopy: true
+      - type: bind
+        source: ./laravel
+        target: /work/backend
+      - type: volume
+        source: psysh-store
+        target: /root/.config/psysh
+        volume:
+          nocopy: true
+    environment:
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=hrm
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+
+  # Nginx
+  web:
+    # image: 3shin/nginx_and_node_for_laravel:latest
+    build:
+      context: .
+      dockerfile: ./.docker/web/Dockerfile
+    ports:
+      - target: 80
+        published: 8000
+        protocol: tcp
+        mode: host
+    volumes:
+      - type: volume
+        source: php-fpm-socket
+        target: /var/run/php-fpm
+        volume:
+          nocopy: true
+      - type: bind
+        source: ./laravel
+        target: /work/backend
+
+

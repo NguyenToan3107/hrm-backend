@@ -1,0 +1,2 @@
+ALTER TABLE m_users
+ADD gender TINYINT(1) DEFAULT NULL;
