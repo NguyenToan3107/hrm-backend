@@ -274,10 +274,10 @@ class LeaveController extends Controller
                     }
                     // Reject if the selected shift matches the previous shift
                     if ($shiftChoseUser == $leave->shift) {
-                        if($shiftChoseUser == SHIFT_MORNING) {
+                        if ($shiftChoseUser == SHIFT_MORNING) {
                             return errorResponse(SHIFT_OF_LEAVE_EXISTED_MORNING);
                         }
-                        if($shiftChoseUser == SHIFT_AFTERNOON) {
+                        if ($shiftChoseUser == SHIFT_AFTERNOON) {
                             return errorResponse(SHIFT_OF_LEAVE_EXISTED_AFTERNOON);
                         }
                     }
@@ -285,7 +285,7 @@ class LeaveController extends Controller
             }
         }
 
-        if($user->hasRole('admin')) {
+        if ($user->hasRole('admin')) {
             $leaveFirst = Leave::where('user_id', $user->id)
                 ->whereDate('day_leave', $formattedDayLeave)
                 ->where('status', STATUS_APPROVAL)
@@ -325,13 +325,13 @@ class LeaveController extends Controller
 
             if ($user->hasRole('admin')) {
                 $totalTimeOff = $user->time_off_hours + $user->last_year_time_off;
-                if(!$leaveFirst) {
+                if (!$leaveFirst) {
                     // total time include last year and current year time off
                     $leaveTime = $leave->shift == SHIFT_ALL_DAY ? TIME_ALL_DAY : TIME_HALF_DAY;
                     // calculate salary
                     $salary = UNPAID_LEAVE;
                     $timeSourceLeave = calculateTimeSource($user, $leaveTime);
-                    if($user->status_working == STATUS_OFFICIAL) {
+                    if ($user->status_working == STATUS_OFFICIAL) {
                         if ($totalTimeOff >= $leaveTime) {
                             $salary = PAID_LEAVE;
                             // calculate time off
@@ -348,7 +348,7 @@ class LeaveController extends Controller
                     ]);
                 }
                 // merge leave admin
-                if($leaveFirst) {
+                if ($leaveFirst) {
                     // calculator salary
                     $leaveSecondTime = TIME_HALF_DAY;
                     $salaryLeaveFirst = $leaveFirst->salary;
@@ -371,18 +371,18 @@ class LeaveController extends Controller
                             } else {
                                 $updateSalaryLeaveFirst = UNPAID_LEAVE;
                             }
-                        // TH: đơn 1 nghỉ có lương
+                            // TH: đơn 1 nghỉ có lương
                         } else {
                             // TH1: giờ phép >= 4
                             if ($totalTimeOff >= TIME_HALF_DAY) {
                                 $updateSalaryLeaveFirst = PAID_LEAVE;
                                 calculateTimeOff(TIME_HALF_DAY, $user);
-                            // TH2: giờ phép < 4
+                                // TH2: giờ phép < 4
                             } else {
                                 $updateSalaryLeaveFirst = UNPAID_LEAVE;
                             }
                         }
-                    // TH: ko là nhân viên chính thức
+                        // TH: ko là nhân viên chính thức
                     } else {
                         $updateSalaryLeaveFirst = UNPAID_LEAVE;
                     }
@@ -434,102 +434,6 @@ class LeaveController extends Controller
             }
 
             DB::commit();
-
-            try {
-                $memberId = getSlackMemberId($user->email);
-                $approverEmail = User::select('email')
-                                    ->where('id', $request->input('approver_id'))
-                                    ->first()->email;
-                $approverId = getSlackMemberId($approverEmail);
-                $approverName = User::select('fullname')
-                                    ->where('id', $request->input('approver_id'))
-                                    ->first()->fullname;
-                $approverCode = User::select('idkey')
-                                    ->where('id', $request->input('approver_id'))
-                                    ->first()->idkey;
-                $status = match($leave->status) {
-                    0 => 'Đang chờ duyệt',
-                    1 => 'Được chấp thuận cho nghỉ',
-                    2 => 'Không được chấp thuận cho nghỉ',
-                    default => 'Đang chờ duyệt'
-                };
-                switch ($leave->shift) {
-                    case 0:
-                        $shift = 'Cả ngày';
-                        break;
-                    case 1:
-                        $shift = 'Sáng';
-                        break;
-                    case 2:
-                        $shift = 'Chiều';
-                        break;
-                    default:
-                        $shift = '';
-                        break;
-                }
-
-                $idKey = $leave->idkey;
-                $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$idKey";
-                $description = truncateTextByLines($leave->description);
-                $otherInfo = truncateTextByLines($leave->other_info);
-
-                if($user->hasRole('admin') && $leaveFirst) {
-                    $status = match($leaveFirst->status) {
-                        0 => 'Đang chờ duyệt',
-                        1 => 'Được chấp thuận cho nghỉ',
-                        2 => 'Không được chấp thuận cho nghỉ',
-                        default => 'Đang chờ duyệt'
-                    };
-                    switch ($leaveFirst->shift) {
-                        case 0:
-                            $shift = 'Cả ngày';
-                            break;
-                        case 1:
-                            $shift = 'Sáng';
-                            break;
-                        case 2:
-                            $shift = 'Chiều';
-                            break;
-                        default:
-                            $shift = '';
-                            break;
-                    }
-                    $idKey = $leaveFirst->idkey;
-                    $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$idKey";
-                    $description = truncateTextByLines($leaveFirst->description);
-                    $otherInfo = truncateTextByLines($leaveFirst->other_info);
-                }
-
-                $payload = [
-                    'blocks' => [
-                        [
-                            'type' => 'section',
-                            'text' => [
-                                'type' => 'mrkdwn',
-                                'text' => "Đơn xin nghỉ phép mới được tạo <{$leaveLink}|$idKey>"
-                            ]
-                        ],
-                        [
-                            'type' => 'section',
-                            'fields' => [
-                                ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $user->fullname ($user->idkey)"],
-                                ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $formattedDayLeave $shift"],
-                                ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* $status"],
-                                ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* $description"],
-                                ['type' => 'mrkdwn', 'text' => "*Thông tin khác :* $otherInfo"]
-                            ]
-                        ]
-                    ]
-                ];
-                sendSlackNotification($payload);
-            } catch (\Exception $th) {
-                return response()->json([
-                    'code'    => OK,
-                    'message' => 'Thành công',
-                    'data'    => new LeaveUserResource($leave)
-                ], SUCCESS);
-            }
 
             return response()->json([
                 'code'             => OK,
@@ -642,7 +546,7 @@ class LeaveController extends Controller
                         }
                     }
                 } else {
-                    if($leave->day_leave != $formattedDayCheck) {
+                    if ($leave->day_leave != $formattedDayCheck) {
                         return errorResponse(EXISTED_LEAVE_WAITING_ON_DAY);
                     }
                 }
@@ -677,73 +581,6 @@ class LeaveController extends Controller
             ]);
 
             DB::commit();
-
-            try {
-                $memberId = getSlackMemberId($user->email);
-                $approverEmail = User::select('email')
-                                    ->where('id', $request->input('approver_id') ?? $leave->approver_id)
-                                    ->first()->email;
-
-                $approverId = getSlackMemberId($approverEmail);
-                $approverName = User::select('fullname')
-                                    ->where('id', $request->input('approver_id') ?? $leave->approver_id)
-                                    ->first()->fullname;
-                $approverCode = User::select('idkey')
-                                    ->where('id', $request->input('approver_id') ?? $leave->approver_id)
-                                    ->first()->idkey;
-                $status = match($leave->status) {
-                    0 => 'Đang chờ duyệt',
-                    1 => 'Được chấp thuận cho nghỉ',
-                    2 => 'Không được chấp thuận cho nghỉ',
-                    default => 'Đang chờ duyệt'
-                };
-                switch ($leave->shift) {
-                    case 0:
-                        $shift = 'Cả ngày';
-                        break;
-                    case 1:
-                        $shift = 'Sáng';
-                        break;
-                    case 2:
-                        $shift = 'Chiều';
-                        break;
-                    default:
-                        $shift = '';
-                        break;
-                }
-                $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$leave->idkey";
-                $description = truncateTextByLines($leave->description);
-                $otherInfo = truncateTextByLines($leave->other_info);
-                $payload = [
-                    'blocks' => [
-                        [
-                            'type' => 'section',
-                            'text' => [
-                                'type' => 'mrkdwn',
-                                'text' => "Đơn xin nghỉ phép được chỉnh sửa <{$leaveLink}|$leave->idkey>"
-                            ]
-                        ],
-                        [
-                            'type' => 'section',
-                            'fields' => [
-                                ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $user->fullname ($user->idkey)"],
-                                ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $formattedDayLeave $shift"],
-                                ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* $status"],
-                                ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* $description"],
-                                ['type' => 'mrkdwn', 'text' => "*Thông tin khác :* $otherInfo"]
-                            ]
-                        ]
-                    ]
-                ];
-                sendSlackNotification($payload);
-            } catch (\Exception $th) {
-                return response()->json([
-                    'code'    => OK,
-                    'message' => 'Thành công',
-                    'data'    => new LeaveUserResource($leave)
-                ], SUCCESS);
-            }
 
             return response()->json([
                 'code'    => OK,
@@ -850,78 +687,6 @@ class LeaveController extends Controller
 
             DB::commit();
 
-            try {
-                $memberId = getSlackMemberId($user->email);
-                $memberName = $user->fullname;
-                $memberCode = $user->idkey;
-                $approverEmail = User::select('email')
-                                    ->where('id', $leave->approver_id)
-                                    ->first()->email;
-                $approverId = getSlackMemberId($approverEmail);
-                $approverName = User::select('fullname')
-                                    ->where('id', $leave->approver_id)
-                                    ->first()->fullname;
-                $approverCode = User::select('idkey')
-                                    ->where('id', $leave->approver_id)
-                                    ->first()->idkey;
-
-                $status = match($leave->status) {
-                    0 => 'Đang chờ duyệt',
-                    1 => 'Được chấp thuận cho nghỉ',
-                    2 => 'Không được chấp thuận cho nghỉ',
-                    default => 'Đang chờ duyệt'
-                };
-
-                switch ($leave->shift) {
-                    case 0:
-                        $shift = 'Cả ngày';
-                        break;
-                    case 1:
-                        $shift = 'Sáng';
-                        break;
-                    case 2:
-                        $shift = 'Chiều';
-                        break;
-                    default:
-                        $shift = '';
-                        break;
-                }
-
-                $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$leave->idkey";
-                $description = truncateTextByLines($leave->description);
-                $cancelRequestDesc = truncateTextByLines($leave->cancel_request_desc);
-                $formattedCancelRequestDesc = "```\n{$cancelRequestDesc}\n```";
-                $payload = [
-                    'blocks' => [
-                        [
-                            'type' => 'section',
-                            'text' => [
-                                'type' => 'mrkdwn',
-                                'text' => "Đơn xin nghỉ phép có Cancel Request <{$leaveLink}|$leave->idkey>"
-                            ]
-                        ],
-                        [
-                            'type' => 'section',
-                            'fields' => [
-                                ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $memberName ($memberCode)"],
-                                ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $leave->day_leave $shift"],
-                                ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* $status"],
-                                ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* {$description}"],
-                                ['type' => 'mrkdwn', 'text' => "*Lý do Cancel request :* {$formattedCancelRequestDesc}"]
-                            ]
-                        ]
-                    ]
-                ];
-                sendSlackNotification($payload);
-            } catch (\Exception $th) {
-                return response()->json([
-                    'code'    => OK,
-                    'message' => 'Thành công',
-                    'data'    => new LeaveUserResource($leave)
-                ], SUCCESS);
-            }
-
             return response()->json([
                 'code'    => OK,
                 'message' => 'Thành công',
@@ -995,86 +760,6 @@ class LeaveController extends Controller
             ]);
 
             DB::commit();
-
-            try {
-                $approverId = getSlackMemberId(auth()->user()->email);
-                $approverName = auth()->user()->fullname;
-                $approverCode = auth()->user()->idkey;
-
-                $memberEmail = User::select('email')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->email;
-                $memberId = getSlackMemberId($memberEmail);
-                $memberName = User::select('fullname')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->fullname;
-                $memberCode = User::select('idkey')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->idkey;
-
-                $status = match($leave->status) {
-                    0 => 'Đang chờ duyệt',
-                    1 => 'Được chấp thuận cho nghỉ',
-                    2 => 'Không được chấp thuận cho nghỉ',
-                    default => 'Đang chờ duyệt'
-                };
-
-                switch ($leave->shift) {
-                    case 0:
-                        $shift = 'Cả ngày';
-                        break;
-                    case 1:
-                        $shift = 'Sáng';
-                        break;
-                    case 2:
-                        $shift = 'Chiều';
-                        break;
-                    default:
-                        $shift = '';
-                        break;
-                }
-
-                $salary = match($leave->salary) {
-                    0 => 'Nghỉ không lương',
-                    1 => 'Nghỉ có lương',
-                    2 => 'Nghỉ ko lương nửa ngày',
-                    default => 'Nghỉ không lương'
-                };
-
-                $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$leave->idkey";
-                $description = truncateTextByLines($leave->description);
-                $cancelRequestDesc = truncateTextByLines($leave->cancel_request_desc);
-                $formattedCancelRequestDesc = "```\n{$cancelRequestDesc}\n```";
-                $payload = [
-                    'blocks' => [
-                        [
-                            'type' => 'section',
-                            'text' => [
-                                'type' => 'mrkdwn',
-                                'text' => "Đơn xin nghỉ phép Cancel Request đã bị bỏ qua <{$leaveLink}|$leave->idkey>"
-                            ]
-                        ],
-                        [
-                            'type' => 'section',
-                            'fields' => [
-                                ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $memberName ($memberCode)"],
-                                ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $leave->day_leave $shift"],
-                                ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* `$status`"],
-                                ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* $description"],
-                                ['type' => 'mrkdwn', 'text' => "*Lý do Cancel request :* {$formattedCancelRequestDesc}"]
-                            ]
-                        ]
-                    ]
-                ];
-                sendSlackNotification($payload);
-            } catch (\Exception $th) {
-                return response()->json([
-                    'code'    => OK,
-                    'message' => 'Thành công',
-                    'data'    => new LeaveUserResource($leave)
-                ], SUCCESS);
-            }
 
             return response()->json([
                 'code'    => OK,
@@ -1155,7 +840,7 @@ class LeaveController extends Controller
                 // calculate salary
                 $salary = UNPAID_LEAVE;
                 $timeSourceLeave = calculateTimeSource($user, $leaveTime);
-                if($user->status_working == STATUS_OFFICIAL) {
+                if ($user->status_working == STATUS_OFFICIAL) {
                     if ($totalTimeOff >= $leaveTime) {
                         $salary = PAID_LEAVE;
                         // calculate time off
@@ -1201,13 +886,13 @@ class LeaveController extends Controller
                         } else {
                             $updateSalaryLeaveFirst = UNPAID_LEAVE;
                         }
-                    // TH: đơn 1 nghỉ có lương
+                        // TH: đơn 1 nghỉ có lương
                     } else {
                         // TH1: giờ phép >= 4
                         if ($totalTimeOff >= TIME_HALF_DAY) {
                             $updateSalaryLeaveFirst = PAID_LEAVE;
                             calculateTimeOff($leaveTime, $user);
-                        // TH2: giờ phép < 4
+                            // TH2: giờ phép < 4
                         } else {
                             $updateSalaryLeaveFirst = UNPAID_LEAVE;
                         }
@@ -1264,137 +949,6 @@ class LeaveController extends Controller
             }
 
             DB::commit();
-
-            try {
-                $approverId = getSlackMemberId(auth()->user()->email);
-                $approverName = auth()->user()->fullname;
-                $approverCode = auth()->user()->idkey;
-
-                $memberEmail = User::select('email')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->email;
-                $memberId = getSlackMemberId($memberEmail);
-                $memberName = User::select('fullname')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->fullname;
-                $memberCode = User::select('idkey')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->idkey;
-
-                $status = match($leave->status) {
-                    0 => 'Đang chờ duyệt',
-                    1 => 'Được chấp thuận cho nghỉ',
-                    2 => 'Không được chấp thuận cho nghỉ',
-                    default => 'Đang chờ duyệt'
-                };
-
-                switch ($leave->shift) {
-                    case 0:
-                        $shift = 'Cả ngày';
-                        break;
-                    case 1:
-                        $shift = 'Sáng';
-                        break;
-                    case 2:
-                        $shift = 'Chiều';
-                        break;
-                    default:
-                        $shift = '';
-                        break;
-                }
-
-                $salary = match($leave->salary) {
-                    0 => 'Nghỉ không lương',
-                    1 => 'Nghỉ có lương',
-                    2 => 'Nghỉ ko lương nửa ngày',
-                    default => 'Nghỉ không lương'
-                };
-                $idKey = $leave->idkey;
-                $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$idKey";
-                $description = truncateTextByLines($leave->description);
-                $dayLeave = $leave->day_leave;
-
-                if ($leaveFirst) {
-                    $approverId = getSlackMemberId(auth()->user()->email);
-                    $approverName = auth()->user()->fullname;
-                    $approverCode = auth()->user()->idkey;
-
-                    $memberEmail = User::select('email')
-                                        ->where('id', $leaveFirst->user_id)
-                                        ->first()->email;
-                    $memberId = getSlackMemberId($memberEmail);
-                    $memberName = User::select('fullname')
-                                        ->where('id', $leaveFirst->user_id)
-                                        ->first()->fullname;
-                    $memberCode = User::select('idkey')
-                                        ->where('id', $leaveFirst->user_id)
-                                        ->first()->idkey;
-
-                    $status = match($leaveFirst->status) {
-                        0 => 'Đang chờ duyệt',
-                        1 => 'Được chấp thuận cho nghỉ',
-                        2 => 'Không được chấp thuận cho nghỉ',
-                        default => 'Đang chờ duyệt'
-                    };
-
-                    switch ($leaveFirst->shift) {
-                        case 0:
-                            $shift = 'Cả ngày';
-                            break;
-                        case 1:
-                            $shift = 'Sáng';
-                            break;
-                        case 2:
-                            $shift = 'Chiều';
-                            break;
-                        default:
-                            $shift = '';
-                            break;
-                    }
-
-                    $salary = match($leaveFirst->salary) {
-                        0 => 'Nghỉ không lương',
-                        1 => 'Nghỉ có lương',
-                        2 => 'Nghỉ ko lương nửa ngày',
-                        default => 'Nghỉ không lương'
-                    };
-                    $idKey = $leaveFirst->idkey;
-                    $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$idKey";
-                    $description = truncateTextByLines($leaveFirst->description);
-                    $dayLeave = $leaveFirst->day_leave;
-                }
-
-                $payload = [
-                    'blocks' => [
-                        [
-                            'type' => 'section',
-                            'text' => [
-                                'type' => 'mrkdwn',
-                                'text' => "Đơn xin nghỉ phép đã được duyệt <{$leaveLink}|$idKey>"
-                            ]
-                        ],
-                        [
-                            'type' => 'section',
-                            'fields' => [
-                                ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $memberName ($memberCode)"],
-                                ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $dayLeave $shift"],
-                                ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* `$status`"],
-                                ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* $description"],
-                                ['type' => 'mrkdwn', 'text' => "*Phân loại :* $salary"]
-                            ]
-                        ]
-                    ]
-                ];
-                sendSlackNotification($payload);
-            } catch (\Exception $th) {
-                return response()->json([
-                    'code'    => OK,
-                    'message' => 'Thành công',
-                    'data'    => new LeaveUserResource($leave)
-                ], SUCCESS);
-            }
-
             return response()->json([
                 'code'    => OK,
                 'message' => $mergeLeave,
@@ -1525,114 +1079,6 @@ class LeaveController extends Controller
 
             DB::commit();
 
-            try {
-                $approverId = getSlackMemberId(auth()->user()->email);
-                $approverName = auth()->user()->fullname;
-                $approverCode = auth()->user()->idkey;
-
-                $memberEmail = User::select('email')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->email;
-                $memberId = getSlackMemberId($memberEmail);
-                $memberName = User::select('fullname')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->fullname;
-                $memberCode = User::select('idkey')
-                                    ->where('id', $leave->user_id)
-                                    ->first()->idkey;
-
-                $status = match($leave->status) {
-                    0 => 'Đang chờ duyệt',
-                    1 => 'Được chấp thuận cho nghỉ',
-                    2 => 'Không được chấp thuận cho nghỉ',
-                    default => 'Đang chờ duyệt'
-                };
-
-                switch ($leave->shift) {
-                    case 0:
-                        $shift = 'Cả ngày';
-                        break;
-                    case 1:
-                        $shift = 'Sáng';
-                        break;
-                    case 2:
-                        $shift = 'Chiều';
-                        break;
-                    default:
-                        $shift = '';
-                        break;
-                }
-
-                $salary = match($leave->salary) {
-                    0 => 'Nghỉ không lương',
-                    1 => 'Nghỉ có lương',
-                    2 => 'Nghỉ ko lương nửa ngày',
-                    default => 'Nghỉ không lương'
-                };
-
-                $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$leave->idkey";
-                $description = truncateTextByLines($leave->description);
-                $cancelRequestDesc = truncateTextByLines($leave->cancel_request_desc);
-                $formattedCancelRequestDesc = "```\n{$cancelRequestDesc}\n```";
-                if($checkCR)
-                {
-                    $payload = [
-                        'blocks' => [
-                            [
-                                'type' => 'section',
-                                'text' => [
-                                    'type' => 'mrkdwn',
-                                    'text' => "Đơn xin nghỉ phép Cancel Request đã được chấp thuận <{$leaveLink}|$leave->idkey>"
-                                ]
-                            ],
-                            [
-                                'type' => 'section',
-                                'fields' => [
-                                    ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $memberName ($memberCode)"],
-                                    ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                    ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $leave->day_leave $shift"],
-                                    ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* `$status`"],
-                                    ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* $description"],
-                                    ['type' => 'mrkdwn', 'text' => "*Lý do Cancel request :* {$formattedCancelRequestDesc}"]
-                                ]
-                            ]
-                        ]
-                    ];
-                }
-                else
-                {
-                    $payload = [
-                        'blocks' => [
-                            [
-                                'type' => 'section',
-                                'text' => [
-                                    'type' => 'mrkdwn',
-                                    'text' => "Đơn xin nghỉ phép đã bị từ chối <{$leaveLink}|$leave->idkey>"
-                                ]
-                            ],
-                            [
-                                'type' => 'section',
-                                'fields' => [
-                                    ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $memberName ($memberCode)"],
-                                    ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                    ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $leave->day_leave $shift"],
-                                    ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* `$status`"],
-                                    ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* $description"]
-                                ]
-                            ]
-                        ]
-                    ];
-                }
-
-                sendSlackNotification($payload);
-            } catch (\Exception $th) {
-                return response()->json([
-                    'code'    => OK,
-                    'message' => 'Thành công',
-                    'data'    => new LeaveUserResource($leave)
-                ], SUCCESS);
-            }
-
             return response()->json([
                 'code'    => OK,
                 'message' => 'Thành công',
@@ -1724,10 +1170,10 @@ class LeaveController extends Controller
             }
             // Reject if the selected shift matches the previous shift
             if ($shiftChoseAdmin == $leaveFirst->shift) {
-                if($shiftChoseAdmin == SHIFT_MORNING) {
+                if ($shiftChoseAdmin == SHIFT_MORNING) {
                     return errorResponse(SHIFT_OF_LEAVE_EXISTED_MORNING);
                 }
-                if($shiftChoseAdmin == SHIFT_AFTERNOON) {
+                if ($shiftChoseAdmin == SHIFT_AFTERNOON) {
                     return errorResponse(SHIFT_OF_LEAVE_EXISTED_AFTERNOON);
                 }
             }
@@ -1760,7 +1206,7 @@ class LeaveController extends Controller
 
                 // calculate salary
                 $salary = UNPAID_LEAVE;
-                if($user->status_working == STATUS_OFFICIAL) {
+                if ($user->status_working == STATUS_OFFICIAL) {
                     if ($totalTimeOff >= $leaveTime) {
                         $salary = PAID_LEAVE;
                         // calculate time off
@@ -1786,83 +1232,6 @@ class LeaveController extends Controller
                 ]);
 
                 DB::commit();
-
-                try {
-                    $approverId = getSlackMemberId(auth()->user()->email);
-                    $approverName = auth()->user()->fullname;
-                    $approverCode = auth()->user()->idkey;
-
-                    $memberEmail = User::select('email')
-                                        ->where('id', $leave->user_id)
-                                        ->first()->email;
-                    $memberId = getSlackMemberId($memberEmail);
-                    $memberName = User::select('fullname')
-                                        ->where('id', $leave->user_id)
-                                        ->first()->fullname;
-                    $memberCode = User::select('idkey')
-                                        ->where('id', $leave->user_id)
-                                        ->first()->idkey;
-                    $status = match($leave->status) {
-                        0 => 'Đang chờ duyệt',
-                        1 => 'Được chấp thuận cho nghỉ',
-                        2 => 'Không được chấp thuận cho nghỉ',
-                        default => 'Đang chờ duyệt'
-                    };
-
-                    switch ($leave->shift) {
-                        case 0:
-                            $shift = 'Cả ngày';
-                            break;
-                        case 1:
-                            $shift = 'Sáng';
-                            break;
-                        case 2:
-                            $shift = 'Chiều';
-                            break;
-                        default:
-                            $shift = '';
-                            break;
-                    }
-
-                    $salaryLeave = match($leave->salary) {
-                        0 => 'Nghỉ không lương',
-                        1 => 'Nghỉ có lương',
-                        2 => 'Nghỉ ko lương nửa ngày',
-                        default => 'Nghỉ không lương'
-                    };
-
-                    $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$leave->idkey";
-                    $description = truncateTextByLines($leave->description);
-                    $payload = [
-                        'blocks' => [
-                            [
-                                'type' => 'section',
-                                'text' => [
-                                    'type' => 'mrkdwn',
-                                    'text' => "Quản trị viên đã tạo đơn xin nghỉ phép bổ sung được duyệt <{$leaveLink}|$leave->idkey>"
-                                ]
-                            ],
-                            [
-                                'type' => 'section',
-                                'fields' => [
-                                    ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $memberName ($memberCode)"],
-                                    ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                    ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $formattedDayLeave $shift"],
-                                    ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* $status"],
-                                    ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* $description"],
-                                    ['type' => 'mrkdwn', 'text' => "*Phân loại :* $salaryLeave"]
-                                ]
-                            ]
-                        ]
-                    ];
-                    sendSlackNotification($payload);
-                } catch (\Exception $th) {
-                    return response()->json([
-                        'code'    => OK,
-                        'message' => 'Thành công',
-                        'data'    => new LeaveUserResource($leave)
-                    ], SUCCESS);
-                }
 
                 return response()->json([
                     'code'    => OK,
@@ -1892,18 +1261,18 @@ class LeaveController extends Controller
                         } else {
                             $updateSalaryLeaveFirst = UNPAID_LEAVE;
                         }
-                    // TH: đơn 1 nghỉ có lương
+                        // TH: đơn 1 nghỉ có lương
                     } else {
                         // TH1: giờ phép >= 4
                         if ($totalTimeOff >= TIME_HALF_DAY) {
                             $updateSalaryLeaveFirst = PAID_LEAVE;
                             calculateTimeOff($leaveTime, $user);
-                        // TH2: giờ phép < 4
+                            // TH2: giờ phép < 4
                         } else {
                             $updateSalaryLeaveFirst = UNPAID_LEAVE;
                         }
                     }
-                // TH: ko là nhân viên chính thức
+                    // TH: ko là nhân viên chính thức
                 } else {
                     $updateSalaryLeaveFirst = UNPAID_LEAVE;
                 }
@@ -1918,7 +1287,7 @@ class LeaveController extends Controller
                     $user->save();
                 }
                 if ($totalTimeOff >= TIME_HALF_DAY && $salaryLeaveFirst == PAID_LEAVE) {
-                    if($user->status_working != STATUS_OFFICIAL) {
+                    if ($user->status_working != STATUS_OFFICIAL) {
                         if ($leaveFirst->time_source == CURRENT_YEAR_TIME_OFF) {
                             $user->time_off_hours = $user->time_off_hours + TIME_HALF_DAY;
                         } else if ($leaveFirst->time_source == LAST_YEAR_TIME_OFF) {
@@ -1941,82 +1310,6 @@ class LeaveController extends Controller
                 $mergeLeave = 'LEAVE_IS_MERGED';
                 $leaveFirstIdkey = $leaveFirst->idkey;
                 DB::commit();
-
-                try {
-                    $approverId = getSlackMemberId(auth()->user()->email);
-                    $approverName = auth()->user()->fullname;
-                    $approverCode = auth()->user()->idkey;
-
-                    $memberEmail = User::select('email')
-                                        ->where('id', $leaveFirst->user_id)
-                                        ->first()->email;
-                    $memberId = getSlackMemberId($memberEmail);
-                    $memberName = User::select('fullname')
-                                        ->where('id', $leaveFirst->user_id)
-                                        ->first()->fullname;
-                    $memberCode = User::select('idkey')
-                                        ->where('id', $leaveFirst->user_id)
-                                        ->first()->idkey;
-                    $status = match($leaveFirst->status) {
-                        0 => 'Đang chờ duyệt',
-                        1 => 'Được chấp thuận cho nghỉ',
-                        2 => 'Không được chấp thuận cho nghỉ',
-                        default => 'Đang chờ duyệt'
-                    };
-                    switch ($leaveFirst->shift) {
-                        case 0:
-                            $shift = 'Cả ngày';
-                            break;
-                        case 1:
-                            $shift = 'Sáng';
-                            break;
-                        case 2:
-                            $shift = 'Chiều';
-                            break;
-                        default:
-                            $shift = '';
-                            break;
-                    }
-
-                    $salaryLeave = match($leaveFirst->salary) {
-                        0 => 'Nghỉ không lương',
-                        1 => 'Nghỉ có lương',
-                        2 => 'Nghỉ ko lương nửa ngày',
-                        default => 'Nghỉ không lương'
-                    };
-
-                    $leaveLink = config('services.slack.link_hrm') . "/leaves?idkey=$leaveFirst->idkey";
-                    $description = truncateTextByLines($leaveFirst->description);
-                    $payload = [
-                        'blocks' => [
-                            [
-                                'type' => 'section',
-                                'text' => [
-                                    'type' => 'mrkdwn',
-                                    'text' => "Quản trị viên đã tạo đơn xin nghỉ phép bổ sung được duyệt <{$leaveLink}|$leaveFirst->idkey>"
-                                ]
-                            ],
-                            [
-                                'type' => 'section',
-                                'fields' => [
-                                    ['type' => 'mrkdwn', 'text' => "*Người xin phép :* <@$memberId> $memberName ($memberCode)"],
-                                    ['type' => 'mrkdwn', 'text' => "*Người duyệt :* <@$approverId> $approverName ($approverCode)"],
-                                    ['type' => 'mrkdwn', 'text' => "*Thời gian nghỉ :* $formattedDayLeave $shift"],
-                                    ['type' => 'mrkdwn', 'text' => "*Trạng thái đơn :* $status"],
-                                    ['type' => 'mrkdwn', 'text' => "*Lý do tạo đơn :* $description"],
-                                    ['type' => 'mrkdwn', 'text' => "*Phân loại :* $salaryLeave"]
-                                ]
-                            ]
-                        ]
-                    ];
-                    sendSlackNotification($payload);
-                } catch (\Exception $th) {
-                    return response()->json([
-                        'code'    => OK,
-                        'message' => 'Thành công',
-                        'data'    => new LeaveUserResource($leaveFirst)
-                    ], SUCCESS);
-                }
 
                 return response()->json([
                     'code'    => OK,
