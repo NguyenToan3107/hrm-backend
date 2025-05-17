@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Symfony\Component\HttpFoundation\Response;
+use Tymon\JWTAuth\Facades\JWTAuth;
 
 class DayOffController extends Controller
 {
@@ -34,17 +35,21 @@ class DayOffController extends Controller
      */
     public function index(Request $request)
     {
-        $dayOffs = DayOff::select(
-            'id',
-            'title',
-            'description',
-            'started_at',
-            'ended_at',
-            'day_off',
-            'status',
-            'salary',
-            'country'
-        );
+        $validator = Validator::make($request->all(), [
+            'create_date'          => 'sometimes|date_format:d/m/Y',
+            'day_off_start_date'   => 'sometimes|date_format:d/m/Y',
+            'day_off_end_date'     => 'sometimes|date_format:d/m/Y',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'code'    => ERROR,
+                'message' => 'Dữ liệu không hợp lệ',
+                'data'    => $validator->errors(),
+            ], CLIENT_ERROR);
+        }
+
+        $dayOffs = DayOff::query();
 
         if ($request->filled('country')) {
             $country = $request->input('country');
@@ -61,16 +66,71 @@ class DayOffController extends Controller
             $dayOffs->whereYear('day_off', $currentYear);
         }
 
-        $dayOffs = $dayOffs->get();
-        $total = $dayOffs->count();
+        if ($request->filled('day_off_type')) {
+            $leaveType = explode(",", $request->query('day_off_type'));
+            $dayOffs->whereIn('salary', $leaveType);
+        }
+
+        if ($request->filled('status')) {
+            $status = explode(",", $request->query('status'));
+            $dayOffs->whereIn('status', $status);
+        }
+
+        if ($request->filled('create_date')) {
+            $createDate = \DateTime::createFromFormat('d/m/Y', $request->query('create_date'));
+            $formattedCreateDate = $createDate->format('Y-m-d');
+            $dayOffs = $dayOffs->whereDate('created_at', $formattedCreateDate);
+        }
+
+        if ($request->filled('day_off_start_date')) {
+            $startDate = \DateTime::createFromFormat('d/m/Y', $request->input('day_off_start_date'))->format('Y-m-d');
+            $dayOffs = $dayOffs->where('day_off', '>=', $startDate);
+        }
+
+        if ($request->filled('day_off_end_date')) {
+            $endDate = \DateTime::createFromFormat('d/m/Y', $request->input('day_off_end_date'))->format('Y-m-d');
+            $dayOffs = $dayOffs->where('day_off', '<=', $endDate);
+        }
+
+        // Sort
+        if ($request->filled('sort_by') || $request->filled('sort_order')) {
+            $validSortColumns = ['created_at', 'status', 'salary', 'description', 'day_off'];
+
+            $sortBy = $request->query('sort_by', 'created_at');
+            $sortOrder = $request->query('sort_order', 'asc');
+
+            if (!in_array($sortBy, $validSortColumns)) {
+                $sortBy = 'created_at';
+            }
+
+            $sortOrder = $sortOrder === 'desc' ? 'desc' : 'asc';
+
+            if ($sortBy == "salary") {
+                $dayOffs->orderByRaw("salary $sortOrder");
+            } elseif ($sortBy === "description") {
+                $dayOffs = $dayOffs->orderByRaw("LENGTH(description) $sortOrder");
+            } elseif ($sortBy === "day_off") {
+                $dayOffs = $dayOffs->orderByRaw("day_off $sortOrder");
+            } else {
+                $dayOffs = $dayOffs->orderBy($sortBy, $sortOrder);
+            }
+        } else {
+            $dayOffs = $dayOffs->orderBy('day_off', 'asc');
+        }
+
+        // Pagination
+        $limit = $request->filled('limit') ? $request->get('limit') : DEFAULT_PAGE_SIZE;
+        if ($limit > MAX_DEFAULT_PAGE_SIZE) {
+            $limit = MAX_DEFAULT_PAGE_SIZE;
+        }
+        $dayOffs =  $dayOffs->paginate($limit);
 
         return response()->json([
+            'code'    => OK,
             'message' => 'Thành công',
-            'data' => [
-                'total' => $total,
-                'dayOffs' => $dayOffs
-            ]
-        ], 200);
+            'data'    => DayOffResource::collection($dayOffs),
+            'total' => $dayOffs->total(),
+        ], SUCCESS);
     }
 
 

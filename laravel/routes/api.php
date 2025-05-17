@@ -65,7 +65,7 @@ Route::prefix('/api/v1/')->middleware(['api'])->group(function () {
         Route::get('/getdayfornotification', [CalendarController::class, 'getSpecialDayIn14Day']);
 
         ////////////////////////////  DAY OFF
-        Route::get('/day-off', [DayOffController::class, 'index']);
+        Route::get('/day-offs', [DayOffController::class, 'index']);
         Route::get('/day-off/{id}', [DayOffController::class, 'show']);
         Route::post('/day-off', [DayOffController::class, 'store']);
         Route::put('/day-off', [DayOffController::class, 'update']);
