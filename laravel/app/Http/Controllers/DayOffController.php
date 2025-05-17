@@ -117,7 +117,7 @@ class DayOffController extends Controller
                 $dayOffs = $dayOffs->orderBy($sortBy, $sortOrder);
             }
         } else {
-            $dayOffs = $dayOffs->orderBy('day_off', 'asc');
+            $dayOffs = $dayOffs->orderBy('created_at', 'desc');
         }
 
         // Pagination
