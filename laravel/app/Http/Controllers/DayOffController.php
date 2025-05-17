@@ -94,7 +94,7 @@ class DayOffController extends Controller
 
         // Sort
         if ($request->filled('sort_by') || $request->filled('sort_order')) {
-            $validSortColumns = ['created_at', 'status', 'salary', 'description', 'day_off'];
+            $validSortColumns = ['created_at', 'status', 'salary', 'description', 'day_off', 'title'];
 
             $sortBy = $request->query('sort_by', 'created_at');
             $sortOrder = $request->query('sort_order', 'asc');
@@ -109,6 +109,8 @@ class DayOffController extends Controller
                 $dayOffs->orderByRaw("salary $sortOrder");
             } elseif ($sortBy === "description") {
                 $dayOffs = $dayOffs->orderByRaw("LENGTH(description) $sortOrder");
+            } elseif ($sortBy === "title") {
+                $dayOffs = $dayOffs->orderByRaw("LENGTH(title) $sortOrder");
             } elseif ($sortBy === "day_off") {
                 $dayOffs = $dayOffs->orderByRaw("day_off $sortOrder");
             } else {
@@ -142,34 +144,27 @@ class DayOffController extends Controller
      * @apiHeader {String} Authorization Bearer token.
      *
      */
-    public function show($id)
+    public function show(Request $request)
     {
-        $messages = [
-            'required' => 'Yêu cầu :attribute là bắt buộc',
-            'integer' => 'Yêu cầu :attribute phải là một số nguyên',
-            'exists' => 'Không tồn tại ngày phép với id được tìm'
-        ];
-
-        $validator = Validator::make(['id' => $id], [
-            'id' => 'required|integer|exists:m_day_offs'
-        ], $messages);
+        $validator = Validator::make($request->all(), [
+            'id' => 'required|integer|exists:m_day_offs,id',
+        ]);
 
         if ($validator->fails()) {
             return response()->json([
-                'status' => 422,
-                'message' => $validator->errors()
-            ], 422);
+                'code'    => ERROR,
+                'message' => 'ID không hợp lệ hoặc không tồn tại',
+                'data'    => $validator->errors()
+            ], CLIENT_ERROR);
         }
 
-        $dayOff = DayOff::where('id', $id)
-            ->select('id', 'title', 'description', 'started_at', 'ended_at', 'day_off', 'status', 'salary', 'country')
-            ->first();
-
-
+        $id = $request->input('id');
+        $dayOff = DayOff::where('id', $id)->first();
         return response()->json([
+            'code'    => OK,
             'message' => 'Thành công',
-            'data' => $dayOff
-        ], Response::HTTP_OK);
+            'data'    => new DayOffResource($dayOff),
+        ], SUCCESS);
     }
 
 

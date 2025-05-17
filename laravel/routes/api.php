@@ -66,7 +66,7 @@ Route::prefix('/api/v1/')->middleware(['api'])->group(function () {
 
         ////////////////////////////  DAY OFF
         Route::get('/day-offs', [DayOffController::class, 'index']);
-        Route::get('/day-off/{id}', [DayOffController::class, 'show']);
+        Route::get('/day-off', [DayOffController::class, 'show']);
         Route::post('/day-off', [DayOffController::class, 'store']);
         Route::put('/day-off', [DayOffController::class, 'update']);
         Route::delete('/day-off', [DayOffController::class, 'destroy']);
