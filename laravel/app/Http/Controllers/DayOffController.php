@@ -255,14 +255,14 @@ class DayOffController extends Controller
 
         $formattedDayOff = \DateTime::createFromFormat('d/m/Y', $request->input('day_off'))->format('Y-m-d');
 
-        // if (DayOff::where('day_off', $formattedDayOff)->exists()) {
-        //     return errorResponse(DAYOFF_IS_EXIST);
-        // }
+        $id = $request->input('id');
+        if (DayOff::where('day_off', $formattedDayOff)->where('id', '!=', $id)->exists()) {
+            return errorResponse(DAYOFF_IS_EXIST);
+        }
 
         DB::beginTransaction();
 
         try {
-            $id = $request->input('id');
             $dayOff = DayOff::where('id', $id)->where('is_delete', DELETED_N)->first();
 
             // check concurrency
