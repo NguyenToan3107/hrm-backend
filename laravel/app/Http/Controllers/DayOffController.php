@@ -66,11 +66,6 @@ class DayOffController extends Controller
             $dayOffs->whereYear('day_off', $currentYear);
         }
 
-        if ($request->filled('day_off_type')) {
-            $leaveType = explode(",", $request->query('day_off_type'));
-            $dayOffs->whereIn('salary', $leaveType);
-        }
-
         if ($request->filled('status')) {
             $status = explode(",", $request->query('status'));
             $dayOffs->whereIn('status', $status);
@@ -195,6 +190,10 @@ class DayOffController extends Controller
 
         $formattedDayOff = \DateTime::createFromFormat('d/m/Y', $request->input('day_off'))->format('Y-m-d');
 
+        if (DayOff::where('day_off', $formattedDayOff)->exists()) {
+            return errorResponse(DAYOFF_IS_EXIST);
+        }
+
         DB::beginTransaction();
 
         try {
@@ -255,6 +254,10 @@ class DayOffController extends Controller
         }
 
         $formattedDayOff = \DateTime::createFromFormat('d/m/Y', $request->input('day_off'))->format('Y-m-d');
+
+        // if (DayOff::where('day_off', $formattedDayOff)->exists()) {
+        //     return errorResponse(DAYOFF_IS_EXIST);
+        // }
 
         DB::beginTransaction();
 
