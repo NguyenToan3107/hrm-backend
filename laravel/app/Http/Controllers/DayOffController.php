@@ -58,13 +58,13 @@ class DayOffController extends Controller
             $dayOffs->where('country', 'VN');
         }
 
-        if ($request->filled('current_year')) {
-            $currentYear = $request->input('current_year');
-            $dayOffs->whereYear('day_off', $currentYear);
-        } else {
-            $currentYear = Carbon::now()->year;
-            $dayOffs->whereYear('day_off', $currentYear);
-        }
+        // if ($request->filled('current_year')) {
+        //     $currentYear = $request->input('current_year');
+        //     $dayOffs->whereYear('day_off', $currentYear);
+        // } else {
+        //     $currentYear = Carbon::now()->year;
+        //     $dayOffs->whereYear('day_off', $currentYear);
+        // }
 
         if ($request->filled('status')) {
             $status = explode(",", $request->query('status'));
@@ -238,7 +238,7 @@ class DayOffController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'id'          => 'required|integer|exists:m_day_offs,id',
-            'title'       => 'sometimes|string|max:20',
+            'title'       => 'sometimes|string|max:255',
             'day_off'     => 'required|date_format:d/m/Y',
             'status'      => 'required|integer',
             'description' => 'required|string|max:255',
