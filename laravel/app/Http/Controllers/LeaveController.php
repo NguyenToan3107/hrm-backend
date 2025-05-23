@@ -92,7 +92,7 @@ class LeaveController extends Controller
 
         if ($request->filled('status')) {
             $status = explode(",", $request->query('status'));
-            $leaves->whereIn('status', $status);
+            $leaves->whereIn('t_leaves.status', $status);
         }
 
         if ($request->filled('create_date')) {
@@ -154,15 +154,36 @@ class LeaveController extends Controller
                 $leaves = $leaves->orderBy($sortBy, $sortOrder);
             }
         } else {
-            $leaves = $leaves->orderByRaw('CASE
-                    WHEN status = 0 AND cancel_request = 1 THEN 0
-                    WHEN status = 0 AND cancel_request <> 1 THEN 1
-                    WHEN status = 1 AND cancel_request = 1 THEN 2
-                    WHEN status = 1 AND cancel_request <> 1 THEN 3
-                ELSE 4 END')
-                ->orderByRaw('DATE(created_at) desc')
-                ->orderBy('cancel_request', 'asc')
-                ->orderBy('day_leave', 'asc');
+            $leaves = $leaves->leftJoin('m_users', 'm_users.id', '=', 't_leaves.user_id')
+                ->select('t_leaves.*', 'm_users.status_working')
+                ->orderByRaw('
+                    CASE
+                        WHEN t_leaves.status = 0 AND COALESCE(m_users.status_working, 0) = 3 AND t_leaves.cancel_request = 1 THEN 0
+                        WHEN t_leaves.status = 0 AND COALESCE(m_users.status_working, 0) = 3 AND t_leaves.cancel_request <> 1 THEN 1
+                        WHEN t_leaves.status = 0 AND COALESCE(m_users.status_working, 0) = 2 AND t_leaves.cancel_request = 1 THEN 2
+                        WHEN t_leaves.status = 0 AND COALESCE(m_users.status_working, 0) = 2 AND t_leaves.cancel_request <> 1 THEN 3
+                        WHEN t_leaves.status = 0 AND COALESCE(m_users.status_working, 0) = 1 AND t_leaves.cancel_request = 1 THEN 4
+                        WHEN t_leaves.status = 0 AND COALESCE(m_users.status_working, 0) = 1 AND t_leaves.cancel_request <> 1 THEN 5
+                        WHEN t_leaves.status = 0 AND COALESCE(m_users.status_working, 0) NOT IN (1,2,3) AND t_leaves.cancel_request = 1 THEN 6
+                        WHEN t_leaves.status = 0 AND COALESCE(m_users.status_working, 0) NOT IN (1,2,3) AND t_leaves.cancel_request <> 1 THEN 7
+                        WHEN t_leaves.status = 1 AND t_leaves.cancel_request = 1 THEN 8
+                        WHEN t_leaves.status = 1 AND t_leaves.cancel_request <> 1 THEN 9
+                        ELSE 10
+                    END
+                ')
+                ->orderByRaw('DATE(t_leaves.created_at) DESC')
+                ->orderBy('t_leaves.cancel_request', 'asc')
+                ->orderBy('t_leaves.day_leave', 'asc');
+
+            // $leaves = $leaves->orderByRaw('CASE
+            //         WHEN t_leaves.status = 0 AND t_leaves.cancel_request = 1 THEN 0
+            //         WHEN t_leaves.status = 0 AND t_leaves.cancel_request <> 1 THEN 1
+            //         WHEN t_leaves.status = 1 AND t_leaves.cancel_request = 1 THEN 2
+            //         WHEN t_leaves.status = 1 AND t_leaves.cancel_request <> 1 THEN 3
+            //     ELSE 4 END')
+            //     ->orderByRaw('DATE(t_leaves.created_at) desc')
+            //     ->orderBy('t_leaves.cancel_request', 'asc')
+            //     ->orderBy('t_leaves.day_leave', 'asc');
         }
 
         // Pagination
